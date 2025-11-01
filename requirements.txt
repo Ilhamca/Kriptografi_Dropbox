@@ -1,0 +1,10 @@
+streamlit>=1.0
+pytest>=7.0
+streamlit
+streamlit-authenticator
+pycryptodome
+stegano
+mysql-connector-python
+google-api-python-client
+google-auth-oauthlib
+gspread
