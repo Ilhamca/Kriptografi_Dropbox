@@ -33,7 +33,7 @@ def render_login_page():
             # Hash ini adalah untuk password "adminpass"
             EXAMPLE_HASH = "d292e76f6e1a8f6aad1d41162aa87663a232f232b61403d65b184236a3d1fd7c"
 
-            if username == "admin" and verify_password(password, EXAMPLE_HASH):
+            if ):
                 # Jika login berhasil, atur Session State
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = username

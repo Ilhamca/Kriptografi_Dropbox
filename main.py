@@ -1,11 +1,13 @@
 import streamlit as st
 from Crypto.Cipher import ARC4
 from src.crypto import caesar_encrypt, caesar_decrypt, caesar_bruteforce, encrypt_vigenere, decrypt_vigenere, encrypt_rc4, encrypt_super
-
-# The Brain of the Streamlit App
+from src.firebase_utils import init_firebase, login_user, register_user
 
 # Impor fungsi tampilan login dari file login.py
 from src.app.login import render_login_page
+
+# Init firebase
+db = init_firebase()
 
 # --- FUNGSI APLIKASI UTAMA ---
 def render_main_app():
