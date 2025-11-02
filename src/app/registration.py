@@ -2,6 +2,7 @@ import streamlit as st
 import hashlib
 from src.app.login import render_login_page
 from src.firebase_utils import register_user
+from streamlit_cookies_controller import CookieController
 
 # --- FUNGSI HASHING (Kriteria 2) ---
 # Di proyek nyata, ini ada di crypto_utils.py dan Anda akan menggunakan hash
@@ -16,7 +17,6 @@ def verify_password(password, stored_hash):
 def render_registration_page(db):
     """Menampilkan halaman registrasi dan menangani logikanya."""
     
-    st.set_page_config(page_title="Registrasi")
     st.title("📝 Registrasi Akun Dropbox Digital Anda")
 
     with st.form("registration_form"):
@@ -35,6 +35,9 @@ def render_registration_page(db):
                 # Panggil fungsi registrasi dari firebase_utils
                 # Gunakan 'db' dari parameter
                 # Kirim password MENTAH, biarkan firebase_utils yang melakukan hashing
+                
+
+                
                 success, message = register_user(
                     db=db,
                     username=username,

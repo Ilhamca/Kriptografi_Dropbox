@@ -6,6 +6,7 @@ import json
 from datetime import timedelta
 import hashlib  # Untuk hashing
 import os       # Untuk membuat salt (data acak)
+import hmac
 
 # Placeholder for DB connection
 
@@ -34,12 +35,11 @@ def init_firebase():
     return firestore.client() 
 
 # --- FUNGSI LOGIN YANG DIPERBAIKI ---
-def login_user(username, password):
+def login_user(db, username, password):
     """
     Memverifikasi kredensial pengguna dengan Firestore.
     Menggunakan username sebagai ID Dokumen dan memverifikasi hash dengan salt.
     """
-    db = init_firebase()
     if db is None:
         return False, "Koneksi database gagal."
     if not username or not password:
@@ -82,7 +82,7 @@ def login_user(username, password):
         
         # 4. BANDINGKAN HASH DENGAN AMAN
         st.write("Membandingkan hash...")
-        if hashlib.timing_safe_compare(check_hash, stored_hash):
+        if hmac.compare_digest(check_hash, stored_hash):
             return True, "Login berhasil!"
         else:
             return False, "Password salah."
@@ -124,3 +124,11 @@ def register_user(db, username, name, password):
     # Simpan data menggunakan username sebagai ID Dokumen
     users_ref.document(username).set(user_data)
     return True, "Registrasi berhasil!"
+
+def hash_password(password):
+    """Contoh hashing sederhana menggunakan SHA-512."""
+    return hashlib.sha512(password.encode()).hexdigest()
+
+def verify_password(password, stored_hash):
+    """Memverifikasi password yang di-hash."""
+    return hash_password(password) == stored_hash

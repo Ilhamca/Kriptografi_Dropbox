@@ -2,15 +2,26 @@ import streamlit as st
 from Crypto.Cipher import ARC4
 from src.crypto import caesar_encrypt, caesar_decrypt, caesar_bruteforce, encrypt_vigenere, decrypt_vigenere, encrypt_rc4, encrypt_super
 from src.firebase_utils import init_firebase
-# Impor fungsi tampilan login dari file login.py
 from src.app.login import render_login_page
 from src.app.dashboard import main_app as render_main_app
 from src.app.registration import render_registration_page
+import st_cookie
+import datetime 
  
-# Init firebase
+# Init firebase & Cookies Controller
 db = init_firebase()
 
+st.set_page_config(
+    layout="centered",
+    page_title="Secure Digital Dropbox"
+)
 # --- LOGIKA PENGONTROL UTAMA ---
+
+st_cookie.sync(
+    'logged_in', 
+    'username', 
+    'page',
+)
 
 # Inisialisasi session state
 if 'logged_in' not in st.session_state:
