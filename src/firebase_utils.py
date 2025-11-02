@@ -2,101 +2,125 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
-import bcrypt
 import json
 from datetime import timedelta
+import hashlib  # Untuk hashing
+import os       # Untuk membuat salt (data acak)
 
-# --- INI ADALAH KUNCI UTAMA ---
-# Menggunakan st.singleton untuk memastikan Firebase hanya diinisialisasi sekali.
-# Di Streamlit Cloud, kita akan menggunakan st.secrets.
-@st.singleton
+# Placeholder for DB connection
+
+@st.cache_resource
 def init_firebase():
     """Menginisialisasi koneksi Firebase Admin SDK."""
     try:
-        # Coba muat dari st.secrets (untuk deployment)
-        creds_json = st.secrets["firebase_credentials"]
+        creds_json = st.secrets["credentials"]
         creds_dict = json.loads(creds_json)
         creds = credentials.Certificate(creds_dict)
-    except FileNotFoundError:
-        # Jika gagal (lokal), muat dari file
-        creds = credentials.Certificate("credentials.json")
-    except Exception:
-        # Jika di Streamlit Cloud tapi secrets belum diatur
-        st.error("File credentials.json tidak ditemukan atau st.secrets tidak dikonfigurasi!")
-        return None
-
-    try:
-        firebase_admin.get_app()
-    except ValueError:
-        firebase_admin.initialize_app(creds, {
-            'storageBucket': 'secure-dropbox-project.appspot.com' # GANTI DENGAN NAMA BUCKET ANDA
-        })
+    except:
+        try:
+            creds = credentials.Certificate("credentials.json")
+        except FileNotFoundError:
+            st.error("File credentials.json tidak ditemukan!")
+            return None
+        except ValueError as e:
+            st.error(f"Error saat memuat credentials.json: {e}")
+            return None
     
-    return firestore.client()
+    try:
+        firebase_admin.initialize_app(creds)
+    except ValueError:
+        firebase_admin.get_app()
+    
+    return firestore.client() 
 
-# --- FUNGSI LOGIN & REGISTRASI ---
-def register_user(db, username, name, password):
-    """Mendaftarkan pengguna baru ke Firestore."""
+# --- FUNGSI LOGIN YANG DIPERBAIKI ---
+def login_user(username, password):
+    """
+    Memverifikasi kredensial pengguna dengan Firestore.
+    Menggunakan username sebagai ID Dokumen dan memverifikasi hash dengan salt.
+    """
+    db = init_firebase()
+    if db is None:
+        return False, "Koneksi database gagal."
     if not username or not password:
         return False, "Username dan password tidak boleh kosong."
 
-    users_ref = db.collection('users')
-    # Cek jika username sudah ada
+    try:
+        # 1. GUNAKAN .document() UNTUK MENGAMBIL USER SECARA LANGSUNG
+        # Ini jauh lebih cepat dan tidak perlu indeks
+        st.write("Mencari user...")
+        user_doc_ref = db.collection('dropboxaccount').document(username)
+        user_doc = user_doc_ref.get()
+        
+        if not user_doc.exists:
+            st.write("User tidak ditemukan.")
+            return False, "Username tidak ditemukan."
+        
+        # 2. AMBIL DATA HASH DAN SALT
+        st.write("Mengambil data user...")
+        user_data = user_doc.to_dict()
+        stored_hash_hex = user_data.get('password_hash')
+        salt_hex = user_data.get('salt')
+        
+        if not stored_hash_hex or not salt_hex:
+            st.write("Data pengguna korup.")
+            return False, "Data pengguna korup (hash/salt tidak ada)."
+        
+        # 3. VERIFIKASI HASH MENGGUNAKAN SALTs
+        st.write("Memverifikasi password...")
+        salt = bytes.fromhex(salt_hex)
+        
+        # Hash password yang dimasukkan PENGGUNA menggunakan SALT YANG TERSIMPAN
+        check_hash = hashlib.pbkdf2_hmac(
+            'sha512',
+            password.encode('utf-8'),
+            salt,
+            100000  # Iterasi harus SAMA dengan saat registrasi
+        )
+        
+        stored_hash = bytes.fromhex(stored_hash_hex)
+        
+        # 4. BANDINGKAN HASH DENGAN AMAN
+        st.write("Membandingkan hash...")
+        if hashlib.timing_safe_compare(check_hash, stored_hash):
+            return True, "Login berhasil!"
+        else:
+            return False, "Password salah."
+            
+    except Exception as e:
+        st.error(f"Terjadi error: {e}")
+        return False, "Terjadi error saat login."
+
+# --- FUNGSI REGISTRASI (YANG COCOK DENGAN LOGIN DI ATAS) ---
+def register_user(db, username, name, password):
+    """Mendaftarkan pengguna baru menggunakan username sebagai ID Dokumen."""
+    if db is None:
+        return False, "Koneksi database gagal."
+        
+    users_ref = db.collection('dropboxaccount')
+    
+    # Cek jika dokumen dengan ID username itu sudah ada
     if users_ref.document(username).get().exists:
         return False, "Username sudah digunakan."
     
-    # Hash password menggunakan bcrypt
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    # Buat salt baru
+    salt = os.urandom(16)
     
-    # Simpan ke Firestore
+    # Buat hash baru
+    hashed_password = hashlib.pbkdf2_hmac(
+        'sha512',
+        password.encode('utf-8'),
+        salt,
+        100000
+    )
+    
+    # Simpan data, hash, dan salt
     user_data = {
         'name': name,
-        'password_hash': hashed_password.decode('utf-8') # Simpan sebagai string
+        'password_hash': hashed_password.hex(),
+        'salt': salt.hex()
     }
+    
+    # Simpan data menggunakan username sebagai ID Dokumen
     users_ref.document(username).set(user_data)
     return True, "Registrasi berhasil!"
-
-def login_user(db, username, password):
-    """Memverifikasi login pengguna dari Firestore."""
-    if not username or not password:
-        return False, "Username dan password tidak boleh kosong."
-
-    users_ref = db.collection('users')
-    user_doc = users_ref.document(username).get()
-    
-    if not user_doc.exists:
-        return False, "Username tidak ditemukan."
-    
-    user_data = user_doc.to_dict()
-    stored_hash = user_data.get('password_hash').encode('utf-8')
-    
-    # Verifikasi hash
-    if bcrypt.checkpw(password.encode('utf-8'), stored_hash):
-        return True, "Login berhasil!"
-    else:
-        return False, "Password salah."
-
-# --- FUNGSI PENYIMPANAN FILE ---
-def upload_to_storage(file_bytes, destination_blob_name, content_type):
-    """Mengunggah file (dalam bytes) ke Firebase Storage."""
-    bucket = storage.bucket()
-    blob = bucket.blob(destination_blob_name)
-    
-    # Upload dari bytes
-    blob.upload_from_string(file_bytes, content_type=content_type)
-    
-    # Buat signed URL yang valid selama 1 hari (untuk referensi)
-    url = blob.generate_signed_url(timedelta(days=1), method='GET')
-    return blob.name, url # Mengembalikan nama blob (path file)
-
-def log_file_to_firestore(db, username, original_filename, blob_name, crypto_type):
-    """Mencatat metadata file ke Firestore."""
-    files_ref = db.collection('files')
-    file_data = {
-        'owner': username,
-        'original_filename': original_filename,
-        'storage_blob_name': blob_name,
-        'encryption_type': crypto_type,
-        'upload_timestamp': firestore.SERVER_TIMESTAMP
-    }
-    files_ref.add(file_data) # 'add' untuk membuat ID dokumen acak
