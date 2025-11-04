@@ -1,16 +1,13 @@
 import streamlit as st
-from src.firebase_utils import login_user, register_user, hash_password, verify_password
+from src.firebase_utils import login_user, register_user
 from streamlit_cookies_controller import CookieController
 import datetime
 
 # Import database connection utilities here
 
 
-# --- FUNGSI HASHING (Kriteria 2) ---
-# Di proyek nyata, ini ada di crypto_utils.py dan Anda akan menggunakan bcrypt
-
 # --- FUNGSI TAMPILAN LOGIN ---
-def render_login_page(db):
+def render_login_page(db, controller: CookieController) -> None:
     """Menampilkan halaman login dan menangani logikanya."""
     
     st.title("🔐 Secure Digital Dropbox Login")
@@ -25,7 +22,7 @@ def render_login_page(db):
             success, message = login_user(db, username, password)
 
             if success:
-                # Set session state (untuk run saat ini)
+                controller.set('logged_in_user', username)
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = username
                 st.success(message + " Mengalihkan...")

@@ -14,7 +14,7 @@ def verify_password(password, stored_hash):
     """Memverifikasi password yang di-hash."""
     return hash_password(password) == stored_hash
 
-def render_registration_page(db):
+def render_registration_page(db, controller: CookieController) -> None:
     """Menampilkan halaman registrasi dan menangani logikanya."""
     
     st.title("📝 Registrasi Akun Dropbox Digital Anda")

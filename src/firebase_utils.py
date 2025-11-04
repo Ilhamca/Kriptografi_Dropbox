@@ -6,9 +6,7 @@ import json
 from datetime import timedelta
 import hashlib  # Untuk hashing
 import os       # Untuk membuat salt (data acak)
-import hmac
-
-# Placeholder for DB connection
+import hmac     # Untuk compare_digest
 
 @st.cache_resource
 def init_firebase():
@@ -27,10 +25,13 @@ def init_firebase():
             st.error(f"Error saat memuat credentials.json: {e}")
             return None
     
+    # --- PERBAIKAN 1: Logika Inisialisasi Diperbaiki ---
     try:
-        firebase_admin.initialize_app(creds)
-    except ValueError:
+        # Coba ambil aplikasi yang sudah ada
         firebase_admin.get_app()
+    except ValueError:
+        # Jika belum ada, baru inisialisasi
+        firebase_admin.initialize_app(creds)
     
     return firestore.client() 
 
@@ -46,31 +47,22 @@ def login_user(db, username, password):
         return False, "Username dan password tidak boleh kosong."
 
     try:
-        # 1. GUNAKAN .document() UNTUK MENGAMBIL USER SECARA LANGSUNG
-        # Ini jauh lebih cepat dan tidak perlu indeks
-        st.write("Mencari user...")
+        # --- PERBAIKAN 2: Hapus semua st.write() ---
         user_doc_ref = db.collection('dropboxaccount').document(username)
         user_doc = user_doc_ref.get()
         
         if not user_doc.exists:
-            st.write("User tidak ditemukan.")
             return False, "Username tidak ditemukan."
         
-        # 2. AMBIL DATA HASH DAN SALT
-        st.write("Mengambil data user...")
         user_data = user_doc.to_dict()
         stored_hash_hex = user_data.get('password_hash')
         salt_hex = user_data.get('salt')
         
         if not stored_hash_hex or not salt_hex:
-            st.write("Data pengguna korup.")
             return False, "Data pengguna korup (hash/salt tidak ada)."
         
-        # 3. VERIFIKASI HASH MENGGUNAKAN SALTs
-        st.write("Memverifikasi password...")
         salt = bytes.fromhex(salt_hex)
         
-        # Hash password yang dimasukkan PENGGUNA menggunakan SALT YANG TERSIMPAN
         check_hash = hashlib.pbkdf2_hmac(
             'sha512',
             password.encode('utf-8'),
@@ -80,8 +72,7 @@ def login_user(db, username, password):
         
         stored_hash = bytes.fromhex(stored_hash_hex)
         
-        # 4. BANDINGKAN HASH DENGAN AMAN
-        st.write("Membandingkan hash...")
+        # Ganti nama 'compare_digest' (dari 'timing_safe_compare')
         if hmac.compare_digest(check_hash, stored_hash):
             return True, "Login berhasil!"
         else:
@@ -91,7 +82,7 @@ def login_user(db, username, password):
         st.error(f"Terjadi error: {e}")
         return False, "Terjadi error saat login."
 
-# --- FUNGSI REGISTRASI (YANG COCOK DENGAN LOGIN DI ATAS) ---
+# --- FUNGSI REGISTRASI (Sudah Benar) ---
 def register_user(db, username, name, password):
     """Mendaftarkan pengguna baru menggunakan username sebagai ID Dokumen."""
     if db is None:
@@ -99,14 +90,10 @@ def register_user(db, username, name, password):
         
     users_ref = db.collection('dropboxaccount')
     
-    # Cek jika dokumen dengan ID username itu sudah ada
     if users_ref.document(username).get().exists:
         return False, "Username sudah digunakan."
     
-    # Buat salt baru
     salt = os.urandom(16)
-    
-    # Buat hash baru
     hashed_password = hashlib.pbkdf2_hmac(
         'sha512',
         password.encode('utf-8'),
@@ -114,21 +101,58 @@ def register_user(db, username, name, password):
         100000
     )
     
-    # Simpan data, hash, dan salt
     user_data = {
         'name': name,
         'password_hash': hashed_password.hex(),
         'salt': salt.hex()
     }
     
-    # Simpan data menggunakan username sebagai ID Dokumen
     users_ref.document(username).set(user_data)
     return True, "Registrasi berhasil!"
 
-def hash_password(password):
-    """Contoh hashing sederhana menggunakan SHA-512."""
-    return hashlib.sha512(password.encode()).hexdigest()
+# --- Fungsi File (Semua sudah benar) ---
 
-def verify_password(password, stored_hash):
-    """Memverifikasi password yang di-hash."""
-    return hash_password(password) == stored_hash
+def log_file_to_firestore(db, username, original_filename, gdrive_file_id, crypto_type):
+    """Mencatat metadata file ke subkoleksi 'files' milik pengguna."""
+    try:
+        files_ref = db.collection('dropboxaccount').document(username).collection('files')
+        
+        file_data = {
+            'owner': username, 
+            'original_filename': original_filename,
+            'gdrive_file_id': gdrive_file_id,
+            'encryption_type': crypto_type,
+            'upload_timestamp': firestore.SERVER_TIMESTAMP
+        }
+        files_ref.add(file_data)
+        return True
+    except Exception as e:
+        st.error(f"Gagal mencatat file ke Firestore: {e}")
+        return False
+
+def get_user_files(db, username):
+    """Mengambil semua metadata file untuk pengguna tertentu dari Firestore."""
+    files_ref = db.collection('dropboxaccount').document(username).collection('files')
+    
+    query = files_ref.order_by('upload_timestamp', direction=firestore.Query.DESCENDING).stream()
+    
+    file_list = []
+    for doc in query:
+        file_data = doc.to_dict()
+        file_data['doc_id'] = doc.id
+        file_list.append(file_data)
+        
+    return file_list
+
+def delete_file_from_firestore(db, username, doc_id):
+    """Menghapus catatan metadata file dari Firestore berdasarkan ID Dokumen."""
+    try:
+        doc_ref = db.collection('dropboxaccount').document(username).collection('files').document(doc_id)
+        doc_ref.delete()
+        return True
+    except Exception as e:
+        st.error(f"Error menghapus dari Firestore: {e}")
+        return False
+
+# --- PERBAIKAN 3: Hapus fungsi 'hash_password' dan 'verify_password' ---
+# (Fungsi-fungsi tidak aman yang ada di bawah sini telah dihapus)
