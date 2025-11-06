@@ -29,7 +29,6 @@ def get_gdrive_credentials():
             token_json_str = st.secrets["GDRIVE_TOKEN_JSON"]
             token_dict = json.loads(token_json_str) if isinstance(token_json_str, str) else token_json_str
             creds = Credentials.from_authorized_user_info(token_dict, SCOPES)
-            st.info("✅ GDrive loaded from Streamlit Secrets")
     except Exception:
         pass  # Secrets tidak tersedia, lanjut ke prioritas berikutnya
     
@@ -39,7 +38,6 @@ def get_gdrive_credentials():
             token_json_str = os.getenv("GDRIVE_TOKEN_JSON")
             token_dict = json.loads(token_json_str)
             creds = Credentials.from_authorized_user_info(token_dict, SCOPES)
-            st.info("✅ GDrive loaded from .env file")
         except Exception as e:
             st.error(f"❌ Error parsing .env GDrive token: {e}")
             return None
@@ -48,7 +46,6 @@ def get_gdrive_credentials():
     if creds is None and os.path.exists('token.json'):
         try:
             creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-            st.info("✅ GDrive loaded from token.json")
         except Exception as e:
             st.error(f"❌ Error loading token.json: {e}")
             return None
