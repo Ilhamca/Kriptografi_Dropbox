@@ -1,5 +1,6 @@
 # generate_token.py
 import os
+import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -18,6 +19,11 @@ def main():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
+            if not os.path.exists('client_secret.json'):
+                print("❌ File 'client_secret.json' tidak ditemukan!")
+                print("📥 Download dari Google Cloud Console → APIs & Services → Credentials")
+                return
+            
             # Muat client_secret.json
             flow = InstalledAppFlow.from_client_secrets_file(
                 'client_secret.json', SCOPES)
@@ -28,8 +34,17 @@ def main():
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
             
-    print("File 'token.json' berhasil dibuat!")
-    print("Anda sekarang dapat menutup tab browser dan menjalankan aplikasi Streamlit utama Anda.")
+    print("✅ File 'token.json' berhasil dibuat!")
+    
+    # Generate format .env
+    token_dict = json.loads(creds.to_json())
+    print("\n📋 Copy baris ini ke file .env Anda:")
+    print(f"GDRIVE_TOKEN_JSON='{json.dumps(token_dict)}'")
+    
+    print("\n💡 Untuk Streamlit Cloud, tambahkan ke Secrets dengan format:")
+    print('GDRIVE_TOKEN_JSON = """')
+    print(json.dumps(token_dict, indent=2))
+    print('"""')
 
 if __name__ == '__main__':
     main()

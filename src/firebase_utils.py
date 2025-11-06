@@ -7,30 +7,52 @@ from datetime import timedelta
 import hashlib  # Untuk hashing
 import os       # Untuk membuat salt (data acak)
 import hmac     # Untuk compare_digest
+from dotenv import load_dotenv
+
+# Load .env untuk development lokal
+load_dotenv()
 
 @st.cache_resource
 def init_firebase():
     """Menginisialisasi koneksi Firebase Admin SDK."""
+    creds = None
+    
+    # PRIORITAS 1: Coba dari Streamlit Secrets (untuk Streamlit Cloud)
     try:
-        creds_json = st.secrets["credentials"]
-        creds_dict = json.loads(creds_json)
-        creds = credentials.Certificate(creds_dict)
-    except:
+        if "FIREBASE_CREDENTIALS" in st.secrets:
+            creds_json = st.secrets["FIREBASE_CREDENTIALS"]
+            creds_dict = json.loads(creds_json) if isinstance(creds_json, str) else creds_json
+            creds = credentials.Certificate(creds_dict)
+    except Exception:
+        pass  # Secrets tidak tersedia, lanjut ke prioritas berikutnya
+    
+    # PRIORITAS 2: Coba dari Environment Variable (untuk lokal dengan .env)
+    if creds is None and os.getenv("FIREBASE_CREDENTIALS"):
         try:
-            creds = credentials.Certificate("credentials.json")
-        except FileNotFoundError:
-            st.error("File credentials.json tidak ditemukan!")
-            return None
-        except ValueError as e:
-            st.error(f"Error saat memuat credentials.json: {e}")
+            creds_json = os.getenv("FIREBASE_CREDENTIALS")
+            creds_dict = json.loads(creds_json)
+            creds = credentials.Certificate(creds_dict)
+        except Exception as e:
+            st.error(f"❌ Error parsing .env credentials: {e}")
             return None
     
-    # --- PERBAIKAN 1: Logika Inisialisasi Diperbaiki ---
+    # PRIORITAS 3: Fallback ke file lokal (backwards compatibility)
+    if creds is None and os.path.exists("credentials.json"):
+        try:
+            creds = credentials.Certificate("credentials.json")
+        except Exception as e:
+            st.error(f"❌ Error loading credentials.json: {e}")
+            return None
+    
+    # Jika semua gagal
+    if creds is None:
+        st.error("❌ Firebase credentials tidak ditemukan! Pastikan FIREBASE_CREDENTIALS ada di .env atau Streamlit Secrets.")
+        return None
+    
+    # Cek apakah Firebase sudah diinisialisasi
     try:
-        # Coba ambil aplikasi yang sudah ada
         firebase_admin.get_app()
     except ValueError:
-        # Jika belum ada, baru inisialisasi
         firebase_admin.initialize_app(creds)
     
     return firestore.client() 

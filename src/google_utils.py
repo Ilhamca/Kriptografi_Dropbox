@@ -8,6 +8,10 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import os
 import json
+from dotenv import load_dotenv
+
+# Load .env
+load_dotenv()
 
 # Scope ini HARUS SAMA dengan yang ada di generate_token.py
 SCOPES = ['https://www.googleapis.com/auth/drive']
@@ -16,47 +20,60 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 GDRIVE_FOLDER_ID = "1_zseYdyiQFYh3PjkINm8-edDx1DwOmCh" # <-- GANTI DENGAN ID FOLDER ANDA
 
 def get_gdrive_credentials():
-    """Memuat kredensial dari st.secrets atau file lokal (token.json)."""
+    """Memuat kredensial dari st.secrets atau environment variable."""
     creds = None
     
-    # --- Blok 1: Coba dari Streamlit Secrets (Untuk Deployment) ---
+    # PRIORITAS 1: Streamlit Secrets (untuk Cloud)
     try:
-        # Kita perlu DUA secrets sekarang: token dan client_secret
-        token_json_str = st.secrets["GDRIVE_TOKEN_JSON"]
-        client_secret_json_str = st.secrets["GDRIVE_CLIENT_SECRET_JSON"]
-        
-        token_dict = json.loads(token_json_str)
-        creds = Credentials.from_authorized_user_info(token_dict, SCOPES)
-        
-    # --- Blok 2: Coba dari File Lokal (Untuk Testing) ---
-    except: 
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        if "GDRIVE_TOKEN_JSON" in st.secrets:
+            token_json_str = st.secrets["GDRIVE_TOKEN_JSON"]
+            token_dict = json.loads(token_json_str) if isinstance(token_json_str, str) else token_json_str
+            creds = Credentials.from_authorized_user_info(token_dict, SCOPES)
+            st.info("✅ GDrive loaded from Streamlit Secrets")
+    except Exception:
+        pass  # Secrets tidak tersedia, lanjut ke prioritas berikutnya
     
-    # Jika tidak ada kredensial, atau sudah kedaluwarsa, refresh
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            # Kredensial sudah ada tapi kedaluwarsa, kita refresh
-            client_secret_dict = {}
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                st.error(f"Gagal me-refresh token GDrive: {e}")
-                st.error("Jalankan ulang 'generate_token.py' secara manual.")
-                return None        
-        else:
-            # Ini seharusnya tidak terjadi di app utama, hanya di generate_token.py
-            st.error("Tidak ada token.json. Jalankan generate_token.py terlebih dahulu.")
-            return None
-        
-        # Simpan token yang baru di-refresh (jika berjalan lokal)
-        # Di Streamlit Cloud, ini tidak akan tersimpan permanen, tapi tidak apa-apa
+    # PRIORITAS 2: Environment Variable (untuk lokal .env)
+    if creds is None and os.getenv("GDRIVE_TOKEN_JSON"):
         try:
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
-        except:
-            pass # Gagal menulis file di server (diharapkan)
-
+            token_json_str = os.getenv("GDRIVE_TOKEN_JSON")
+            token_dict = json.loads(token_json_str)
+            creds = Credentials.from_authorized_user_info(token_dict, SCOPES)
+            st.info("✅ GDrive loaded from .env file")
+        except Exception as e:
+            st.error(f"❌ Error parsing .env GDrive token: {e}")
+            return None
+    
+    # PRIORITAS 3: File lokal (backwards compatibility)
+    if creds is None and os.path.exists('token.json'):
+        try:
+            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+            st.info("✅ GDrive loaded from token.json")
+        except Exception as e:
+            st.error(f"❌ Error loading token.json: {e}")
+            return None
+    
+    # Jika tidak ada kredensial
+    if creds is None:
+        st.error("❌ Google Drive credentials tidak ditemukan!")
+        st.info("💡 Jalankan `python src/generate_token.py` untuk membuat token baru, lalu tambahkan ke .env")
+        return None
+    
+    # Refresh jika expired
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            st.success("✅ Token berhasil di-refresh")
+        except Exception as e:
+            st.error(f"❌ Gagal refresh token: {e}")
+            return None
+    
+    # Validasi final
+    if not creds.valid:
+        st.error("❌ Google Drive credentials tidak valid!")
+        st.info("💡 Jalankan `python src/generate_token.py` untuk membuat token baru")
+        return None
+    
     return creds
 
 @st.cache_resource

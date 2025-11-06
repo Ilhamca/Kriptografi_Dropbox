@@ -1,3 +1,7 @@
+# Load environment variables FIRST before any other imports
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 from Crypto.Cipher import ARC4
 from src.firebase_utils import init_firebase
@@ -5,7 +9,6 @@ from src.app.login import render_login_page
 from src.app.registration import render_registration_page
 from streamlit_cookies_controller import CookieController
 from src.app.dashboard import main_app
-import st_cookie
 import datetime 
  
 # Init firebase & Cookies Controller
@@ -23,11 +26,6 @@ db = init_firebase()
 
 # --- LOGIKA PENGONTROL UTAMA ---
 controller = CookieController()
-st_cookie.sync(
-    'logged_in', 
-    'username', 
-    'page',
-)
 
 # Inisialisasi session state
 if 'logged_in' not in st.session_state:

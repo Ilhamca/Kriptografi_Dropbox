@@ -1,9 +1,5 @@
-gspread
 streamlit
-pytest
-st_cookie
 streamlit-cookies-controller
-streamlit-authenticator
 firebase-admin
 google-api-python-client
 google-auth
@@ -12,3 +8,4 @@ google-auth-httplib2
 pycryptodome
 stegano
 Pillow
+python-dotenv

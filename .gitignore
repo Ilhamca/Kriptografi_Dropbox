@@ -1,4 +1,15 @@
+# Secrets - do NOT commit
+.env
+token.json
 client_secret.json
 credentials.json
-token.json
-.env
+_Donotshare/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
