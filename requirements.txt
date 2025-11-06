@@ -1,6 +1,7 @@
 gspread
 streamlit
 pytest
+st_cookie
 streamlit-cookies-controller
 streamlit-authenticator
 firebase-admin
