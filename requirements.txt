@@ -5,11 +5,12 @@ streamlit-authenticator
 pycryptodome
 stegano
 mysql-connector-python
-google-api-python-client
-google-auth-oauthlib
 gspread
 firebase_admin
 hmac
 st-cookie
 google-api-python-client
 google-auth-oauthlib
+google-auth
+google-auth-httplib2
+Pillow
