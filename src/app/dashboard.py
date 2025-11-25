@@ -43,7 +43,6 @@ def main_app(db, controller) -> None:
                 original_name = uploaded_file.name
 
                 try:
-                    # --- INI ADALAH LOGIKA KRITERIA ANDA ---
                     if file_type == "Pesan Teks (.txt)":
                         st.write("Mode: Super Enkripsi (RC4+Vigenere+Railway)")
                         with st.spinner("1/3: Menjalankan Super Enkripsi..."):
@@ -57,16 +56,7 @@ def main_app(db, controller) -> None:
                             return # Hentikan jika pesan kosong
                         
                         with st.spinner("1/3: Menerapkan steganografi..."):
-                            
-                            
-                            # Ubah bytes gambar ke format PIL Image
-                            img_io = io.BytesIO(file_bytes)
-                            img = lsb.hide(img_io, stegano_message)
-                            
-                            # Simpan gambar baru ke memori
-                            img_bytes_io = io.BytesIO()
-                            img.save(img_bytes_io, format='PNG')
-                            encrypted_bytes = img_bytes_io.getvalue() # Ini adalah file gambar .png baru
+                            encrypted_bytes = crypto_utils.encrypt_stenography(file_bytes, stegano_message, encrypt_password)
                             crypto_tag = "Steganography"
                     
                     else: # "File Lain"
@@ -148,26 +138,56 @@ def main_app(db, controller) -> None:
                             # --- LOGIKA DEKRIPSI BERDASARKAN KRITERIA ---
                             if crypto_tag == "SuperEncrypt":
                                 decrypted_bytes = crypto_utils.decrypt_super(encrypted_bytes, decrypt_password)
+                                # Download file hasil dekripsi
+                                st.download_button(
+                                    label=f"Download '{file_data['original_filename']}'",
+                                    data=decrypted_bytes,
+                                    file_name=file_data['original_filename']
+                                )
+                                st.success("File berhasil diproses!")
+                                
                             elif crypto_tag == "ChaCha20":
                                 decrypted_bytes = crypto_utils.decrypt_file(encrypted_bytes, decrypt_password)
+                                # Download file hasil dekripsi
+                                st.download_button(
+                                    label=f"Download '{file_data['original_filename']}'",
+                                    data=decrypted_bytes,
+                                    file_name=file_data['original_filename']
+                                )
+                                st.success("File berhasil diproses!")
+                                
                             elif crypto_tag == "Steganography":
-                                img_io = io.BytesIO(encrypted_bytes)
-                                hidden_message = lsb.reveal(img_io)
-                                if hidden_message:
-                                    st.success(f"Pesan Tersembunyi Ditemukan: **{hidden_message}**")
-                                else:
-                                    st.warning("Tidak ada pesan tersembunyi di gambar ini.")
-                                decrypted_bytes = encrypted_bytes # Berikan file gambarnya
-                            else:
-                                decrypted_bytes = encrypted_bytes # Tipe tidak diketahui
-
-                        # Berikan tombol download
-                        st.download_button(
-                            label=f"Download '{file_data['original_filename']}'",
-                            data=decrypted_bytes,
-                            file_name=file_data['original_filename']
-                        )
-                        st.success("File berhasil diproses!")
+                                # Untuk steganografi, ekstrak teks rahasia dan kembalikan gambar asli
+                                secret_text = crypto_utils.decrypt_stenography(encrypted_bytes, decrypt_password)
+                                
+                                # Buat file .txt untuk secret text
+                                secret_filename = file_data['original_filename'].rsplit('.', 1)[0] + '_secret.txt'
+                                
+                                st.success("Steganografi berhasil diekstrak!")
+                                
+                                # Tampilkan secret text
+                                st.text_area("Pesan Rahasia:", secret_text, height=150)
+                                
+                                # Download buttons dalam 2 kolom
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    # Download gambar asli
+                                    st.download_button(
+                                        label=f"📷 Download Gambar '{file_data['original_filename']}'",
+                                        data=encrypted_bytes,
+                                        file_name=file_data['original_filename'],
+                                        mime="image/png"
+                                    )
+                                
+                                with col2:
+                                    # Download secret text sebagai .txt
+                                    st.download_button(
+                                        label=f"📄 Download Secret Text",
+                                        data=secret_text.encode('utf-8'),
+                                        file_name=secret_filename,
+                                        mime="text/plain"
+                                    )
 
                     except Exception as e:
                         # Ini akan menangkap error password salah

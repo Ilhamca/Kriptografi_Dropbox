@@ -57,7 +57,7 @@ def get_gdrive_credentials():
         return None
     
     # Refresh jika expired
-    if creds.expired and creds.refresh_token:
+    if creds.token_state == "expired" and creds.refresh_token:
         try:
             creds.refresh(Request())
             st.success("✅ Token berhasil di-refresh")
@@ -66,7 +66,7 @@ def get_gdrive_credentials():
             return None
     
     # Validasi final
-    if not creds.valid:
+    if creds.token_state == "invalid":
         st.error("❌ Google Drive credentials tidak valid!")
         st.info("💡 Jalankan `python src/generate_token.py` untuk membuat token baru")
         return None

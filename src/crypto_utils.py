@@ -180,22 +180,122 @@ def encrypt_file(file_bytes: bytes, password: str) -> bytes:
     ciphertext = cipher.encrypt(file_bytes)
     
     # Kita harus menyimpan 'nonce' (nilai unik) bersama dengan ciphertext
-    # Nonce ChaCha20 adalah 12 byte
-    return cipher.nonce + ciphertext
+    # Nonce ChaCha20 default adalah 8 bytes (bisa 12 jika pakai nonce=... parameter)
+    nonce_length = len(cipher.nonce).to_bytes(1, byteorder='big')  # Simpan panjang nonce (1 byte)
+    return nonce_length + cipher.nonce + ciphertext
 
 def decrypt_file(encrypted_bytes: bytes, password: str) -> bytes:
     """Mendekripsi file ChaCha20."""
     try:
         key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), b'salt_chacha', 100000, dklen=32)
         
-        # Pisahkan nonce (12 byte pertama) dari sisa ciphertext
-        nonce = encrypted_bytes[:12]
-        ciphertext = encrypted_bytes[12:]
+        # Baca panjang nonce (1 byte pertama)
+        nonce_length = encrypted_bytes[0]
+        
+        # Pisahkan nonce dan ciphertext
+        nonce = encrypted_bytes[1:1+nonce_length]
+        ciphertext = encrypted_bytes[1+nonce_length:]
         
         cipher = ChaCha20.new(key=key, nonce=nonce)
         decrypted_bytes = cipher.decrypt(ciphertext)
         return decrypted_bytes
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, IndexError) as e:
         # Error ini akan terjadi jika password salah (kunci salah)
         # atau jika file tersebut tidak dienkripsi dengan ChaCha20
-        raise Exception("Password salah atau file korup.")
+        raise Exception(f"Password salah atau file korup: {str(e)}")
+    
+def encrypt_stenography(image_bytes: bytes, secret_text: str, encrypt_password: str) -> bytes:
+    """
+    Menyembunyikan teks rahasia di dalam gambar menggunakan Steganografi LSB.
+    Teks rahasia dienkripsi dengan super enkripsi terlebih dahulu.
+    """
+    # 1. Enkripsi teks rahasia dengan super enkripsi
+    secret_bytes = secret_text.encode('utf-8')
+    encrypted_secret = encrypt_super(secret_bytes, encrypt_password)
+    
+    # 2. Siapkan header: panjang data rahasia (4 bytes)
+    secret_len = len(encrypted_secret)
+    header = secret_len.to_bytes(4, byteorder='big')
+    data_to_hide = header + encrypted_secret
+    
+    # 3. Cek apakah gambar cukup besar
+    max_bytes = len(image_bytes) // 8  # Setiap byte perlu 8 byte gambar (1 bit per byte)
+    if len(data_to_hide) > max_bytes:
+        raise Exception(f"Gambar terlalu kecil. Perlu {len(data_to_hide)} bytes, tersedia {max_bytes} bytes")
+    
+    # 4. Sembunyikan data di LSB (Least Significant Bit) gambar
+    stego_image = bytearray(image_bytes)
+    data_index = 0
+    bit_index = 0
+    
+    for i in range(len(data_to_hide) * 8):
+        if data_index >= len(data_to_hide):
+            break
+            
+        # Ambil bit dari data yang akan disembunyikan
+        data_byte = data_to_hide[data_index]
+        bit = (data_byte >> (7 - bit_index)) & 1
+        
+        # Sembunyikan bit di LSB byte gambar
+        stego_image[i] = (stego_image[i] & 0xFE) | bit
+        
+        bit_index += 1
+        if bit_index == 8:
+            bit_index = 0
+            data_index += 1
+    
+    return bytes(stego_image)
+
+
+def decrypt_stenography(stego_image_bytes: bytes, decrypt_password: str) -> str:
+    """
+    Mengekstrak dan mendekripsi teks rahasia dari gambar steganografi.
+    """
+    try:
+        # 1. Ekstrak header (4 bytes pertama = 32 bit)
+        header_bits = []
+        for i in range(32):
+            bit = stego_image_bytes[i] & 1
+            header_bits.append(bit)
+        
+        # Konversi bits ke bytes
+        header_bytes = bytearray()
+        for i in range(0, 32, 8):
+            byte = 0
+            for j in range(8):
+                byte = (byte << 1) | header_bits[i + j]
+            header_bytes.append(byte)
+        
+        secret_len = int.from_bytes(header_bytes, byteorder='big')
+        
+        # 2. Validasi panjang
+        max_extractable = (len(stego_image_bytes) // 8) - 4
+        if secret_len > max_extractable or secret_len <= 0:
+            raise Exception("Data rahasia tidak valid atau password salah")
+        
+        # 3. Ekstrak data terenkripsi
+        total_bits = (secret_len + 4) * 8
+        extracted_bits = []
+        for i in range(total_bits):
+            bit = stego_image_bytes[i] & 1
+            extracted_bits.append(bit)
+        
+        # Konversi bits ke bytes (skip header 32 bit pertama)
+        extracted_bytes = bytearray()
+        for i in range(32, len(extracted_bits), 8):
+            byte = 0
+            for j in range(8):
+                if i + j < len(extracted_bits):
+                    byte = (byte << 1) | extracted_bits[i + j]
+            extracted_bytes.append(byte)
+        
+        encrypted_secret = bytes(extracted_bytes[:secret_len])
+        
+        # 4. Dekripsi dengan super dekripsi
+        decrypted_bytes = decrypt_super(encrypted_secret, decrypt_password)
+        secret_text = decrypted_bytes.decode('utf-8')
+        
+        return secret_text
+        
+    except Exception as e:
+        raise Exception(f"Gagal mengekstrak pesan.")
